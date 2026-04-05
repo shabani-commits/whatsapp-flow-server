@@ -38,16 +38,7 @@ app.get("/test", (req, res) => {
 });
 
 // ✅ PUBLIC KEY (MAIN - META USES THIS)
-app.get("/.well-known/public-key", (req, res) => {
-  console.log("👉 Meta requesting public key");
-
-  if (!PUBLIC_KEY) {
-    return res.status(500).end();
-  }
-
-  res.type("text/plain");
-  res.status(200).send(PUBLIC_KEY.trim());
-});
+app.use("/.well-known", express.static(path.join(__dirname, ".well-known")));
 
 // ✅ BACKUP ROUTE (FOR YOU TO TEST)
 app.get("/public-key", (req, res) => {
