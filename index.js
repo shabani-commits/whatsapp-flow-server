@@ -42,11 +42,11 @@ app.get("/.well-known/public-key", (req, res) => {
   console.log("👉 Meta requesting public key");
 
   if (!PUBLIC_KEY) {
-    return res.status(500).send("public.pem not found");
+    return res.status(500).end();
   }
 
-  res.setHeader("Content-Type", "text/plain");
-  res.send(PUBLIC_KEY);
+  res.type("text/plain");
+  res.status(200).send(PUBLIC_KEY.trim());
 });
 
 // ✅ BACKUP ROUTE (FOR YOU TO TEST)
