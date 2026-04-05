@@ -38,7 +38,9 @@ app.get("/test", (req, res) => {
 });
 
 // ✅ PUBLIC KEY (MAIN - META USES THIS)
-app.use("/.well-known", express.static(path.join(__dirname, ".well-known")));
+app.get("/.well-known/public-key", (req, res) => {
+  res.sendFile(path.join(__dirname, ".well-known", "public-key"));
+});
 
 // ✅ BACKUP ROUTE (FOR YOU TO TEST)
 app.get("/public-key", (req, res) => {
