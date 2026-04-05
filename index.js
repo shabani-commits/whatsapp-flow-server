@@ -5,15 +5,22 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-// 🔐 Load private key
+// 🔐 Load keys
 const PRIVATE_KEY = fs.readFileSync("private.pem", "utf8");
+const PUBLIC_KEY = fs.readFileSync("public.pem", "utf8");
 
-// 🟢 Health check (Meta requirement)
+// 🟢 Health check (Meta uses this)
 app.get("/", (req, res) => {
   res.send("WhatsApp Flow Server Running ✅");
 });
 
-// 🔐 Decrypt function
+// 🟢 Public key endpoint (VERY IMPORTANT)
+app.get("/.well-known/public-key", (req, res) => {
+  res.setHeader("Content-Type", "text/plain");
+  res.send(PUBLIC_KEY);
+});
+
+// 🔐 Decrypt request
 function decryptRequest(encryptedData, encryptedKey, iv) {
   const decryptedKey = crypto.privateDecrypt(
     {
@@ -35,7 +42,7 @@ function decryptRequest(encryptedData, encryptedKey, iv) {
   return JSON.parse(decrypted);
 }
 
-// 🔐 Encrypt response (Meta expects this)
+// 🔐 Encrypt response
 function encryptResponse(data, aesKey, iv) {
   const cipher = crypto.createCipheriv("aes-256-cbc", aesKey, iv);
 
@@ -54,12 +61,13 @@ app.post("/", (req, res) => {
 
     console.log("✅ RECEIVED DATA:", decrypted);
 
-    // 🟢 Prepare response
+    // 🟢 Response payload
     const responsePayload = {
       success: true,
       message: "Request received successfully",
     };
 
+    // Generate AES key + IV
     const aesKey = crypto.randomBytes(32);
     const responseIV = crypto.randomBytes(16);
 
@@ -70,7 +78,10 @@ app.post("/", (req, res) => {
     );
 
     const encryptedKey = crypto.publicEncrypt(
-      decrypted.public_key,
+      {
+        key: decrypted.public_key,
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+      },
       aesKey
     );
 
@@ -86,5 +97,8 @@ app.post("/", (req, res) => {
   }
 });
 
+// 🚀 Start server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
