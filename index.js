@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
-// 🔑 YOUR KEYS
+// 🔑 KEYS
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
 3deYTcXbNIX/WJeMTqnfwDs02/PnYLaHkTsDAHTWNmeXdsXZ5vJh8M77gLQBLwsB
@@ -55,7 +55,7 @@ app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 RSA DECRYPT (FINAL CORRECT)
+    // 🔓 RSA DECRYPT
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -67,39 +67,28 @@ app.post("/flow", (req, res) => {
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    // ✅ USE KEY EXACTLY (NO CUTTING)
-    const algorithm =
-      aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+    const algorithm = aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
 
-    // 🔓 DECRYPT PAYLOAD
-    const decipher = crypto.createDecipheriv(
-      algorithm,
-      aesKey,
-      Buffer.from(initial_vector, "base64")
-    );
+    // 🔥 FIXED IV (CRITICAL)
+    const iv = Buffer.from(initial_vector, "base64").subarray(0, 16);
 
+    // 🔓 DECRYPT DATA
+    const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
     decipher.setAutoPadding(true);
 
-    let decrypted = decipher.update(
-      Buffer.from(encrypted_flow_data, "base64")
-    );
+    let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
     decrypted = Buffer.concat([decrypted, decipher.final()]);
 
     const request = JSON.parse(decrypted.toString());
 
-    // ⚙️ RESPONSE
+    // ⚙️ BUILD RESPONSE
     const response =
       request?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
     // 🔐 ENCRYPT RESPONSE
-    const cipher = crypto.createCipheriv(
-      algorithm,
-      aesKey,
-      Buffer.from(initial_vector, "base64")
-    );
-
+    const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
     cipher.setAutoPadding(true);
 
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
@@ -107,7 +96,7 @@ app.post("/flow", (req, res) => {
 
     const base64 = encrypted.toString("base64");
 
-    // ✅ MUST RETURN RAW BASE64 STRING
+    // ✅ MUST RETURN RAW BASE64
     res.setHeader("Content-Type", "text/plain");
     return res.status(200).send(base64);
 
