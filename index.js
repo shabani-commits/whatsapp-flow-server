@@ -4,12 +4,6 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
-// 🔍 DEBUG
-app.use((req, res, next) => {
-  console.log("Incoming:", req.method, req.url);
-  next();
-});
-
 // 🔑 YOUR KEYS
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
@@ -50,23 +44,18 @@ Ju/QCh/JRrCYKX1/YQGJFr6sEwKm+nq7nwsWCitclJ/Up1t2VKwAIwOHW77n+QCg
 v6XQbYOzdDovs36EZz4bsU/B
 -----END PRIVATE KEY-----`;
 
-// ✅ ROOT
-app.get("/", (req, res) => {
-  res.send("Server running ✅");
-});
-
-// ✅ PUBLIC KEY
+// ✅ PUBLIC KEY ENDPOINT
 app.get("/.well-known/public-key", (req, res) => {
   res.setHeader("Content-Type", "text/plain");
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT (FINAL FIXED VERSION)
+// ✅ FLOW ENDPOINT (FINAL)
 app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔥 FIXED: CORRECT RSA DECRYPT (OAEP + SHA256)
+    // 🔓 decrypt AES key (FIXED)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -76,60 +65,50 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    console.log("🔑 AES KEY LENGTH:", aesKey.length);
+    // 🔑 ensure correct length
+    const key = aesKey.length >= 32 ? aesKey.slice(0, 32) : aesKey.slice(0, 16);
+    const algo = key.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
 
-    // ✅ FORCE CORRECT SIZE (IMPORTANT FIX)
-    let finalKey;
-    let algorithm;
-
-    if (aesKey.length >= 32) {
-      finalKey = aesKey.slice(0, 32);
-      algorithm = "aes-256-cbc";
-    } else {
-      finalKey = aesKey.slice(0, 16);
-      algorithm = "aes-128-cbc";
-    }
-
-    // 🔓 DECRYPT DATA
+    // 🔓 decrypt payload
     const decipher = crypto.createDecipheriv(
-      algorithm,
-      finalKey,
+      algo,
+      key,
       Buffer.from(initial_vector, "base64")
     );
 
     let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
     decrypted = Buffer.concat([decrypted, decipher.final()]);
+    const request = JSON.parse(decrypted.toString());
 
-    const requestData = JSON.parse(decrypted.toString());
-
-    console.log("✅ Decrypted:", requestData);
-
-    // ⚙️ RESPONSE
+    // ⚙️ build response
     const response =
-      requestData?.action === "ping"
+      request?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
-    // 🔐 ENCRYPT RESPONSE
+    // 🔐 encrypt response
     const cipher = crypto.createCipheriv(
-      algorithm,
-      finalKey,
+      algo,
+      key,
       Buffer.from(initial_vector, "base64")
     );
 
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
-    // ✅ RETURN BASE64 ONLY (NO EXTRA JSON STRUCTURE)
-    return res.status(200).send(encrypted.toString("base64"));
+    const base64 = encrypted.toString("base64");
 
-  } catch (err) {
-    console.error("🔥 ERROR:", err);
-    return res.status(200).send(""); // ⚠️ MUST RETURN 200 ALWAYS
+    // ✅ IMPORTANT: RETURN RAW BASE64 STRING
+    res.setHeader("Content-Type", "text/plain");
+    return res.status(200).send(base64);
+
+  } catch (e) {
+    console.error("ERROR:", e);
+    return res.status(200).send(""); // must return 200
   }
 });
 
 // 🚀 START
 app.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Running");
+  console.log("🚀 Server running");
 });
