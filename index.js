@@ -40,12 +40,16 @@ app.get("/.well-known/public-key", (req, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT (MAIN ONE)
+// ✅ FLOW ENDPOINT
 app.post("/flow", (req, res) => {
   try {
     console.log("📩 /flow request:", req.body);
 
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
+
+    if (!encrypted_flow_data || !encrypted_aes_key || !initial_vector) {
+      return res.status(400).send("Missing fields");
+    }
 
     // 🔓 1. Decrypt AES key
     const aesKey = crypto.privateDecrypt(
@@ -56,19 +60,30 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    // 🔓 2. Decrypt request data
+    console.log("✅ AES KEY LENGTH:", aesKey.length);
+
+    // 🔓 2. Decrypt request
     const decipher = crypto.createDecipheriv(
       "aes-128-cbc",
       aesKey,
       Buffer.from(initial_vector, "base64")
     );
 
+    decipher.setAutoPadding(true);
+
     let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
     decrypted = Buffer.concat([decrypted, decipher.final()]);
 
-    const requestData = JSON.parse(decrypted.toString());
+    const decryptedText = decrypted.toString();
+    console.log("✅ Decrypted:", decryptedText);
 
-    console.log("✅ Decrypted data:", requestData);
+    let requestData;
+    try {
+      requestData = JSON.parse(decryptedText);
+    } catch (e) {
+      console.log("❌ JSON parse error");
+      return res.status(500).send("Invalid JSON");
+    }
 
     // ⚙️ 3. Build response
     let response;
@@ -93,21 +108,26 @@ app.post("/flow", (req, res) => {
       Buffer.from(initial_vector, "base64")
     );
 
-    let encrypted = cipher.update(JSON.stringify(response));
+    cipher.setAutoPadding(true);
+
+    let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
-    // 📦 5. Send Base64
+    const base64Response = encrypted.toString("base64");
+
+    console.log("✅ Sending encrypted response");
+
     return res.json({
-      data: encrypted.toString("base64")
+      data: base64Response
     });
 
   } catch (err) {
-    console.error("❌ Error:", err);
+    console.error("🔥 FULL ERROR:", err);
     return res.status(500).send("Error processing flow");
   }
 });
 
-// ✅ WEBHOOK VERIFY (keep it)
+// ✅ WEBHOOK VERIFY
 app.get("/flow", (req, res) => {
   const VERIFY_TOKEN = "my_verify_token";
 
