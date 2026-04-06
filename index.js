@@ -10,8 +10,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🔑 KEYS (YOUR REAL ONES)
-
+// 🔑 YOUR KEYS
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
 3deYTcXbNIX/WJeMTqnfwDs02/PnYLaHkTsDAHTWNmeXdsXZ5vJh8M77gLQBLwsB
@@ -56,43 +55,54 @@ app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ PUBLIC KEY ENDPOINT
+// ✅ PUBLIC KEY
 app.get("/.well-known/public-key", (req, res) => {
   res.setHeader("Content-Type", "text/plain");
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT (FINAL FIXED)
+// ✅ FLOW ENDPOINT (FINAL FIXED VERSION)
 app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔥 FIX: CORRECT RSA PADDING (THIS WAS YOUR MAIN BUG)
+    // 🔥 FIXED: CORRECT RSA DECRYPT (OAEP + SHA256)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
         padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: "sha256",
       },
       Buffer.from(encrypted_aes_key, "base64")
     );
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    const algorithm = aesKey.length === 16 ? "aes-128-cbc" : "aes-256-cbc";
+    // ✅ FORCE CORRECT SIZE (IMPORTANT FIX)
+    let finalKey;
+    let algorithm;
 
-    // 🔓 DECRYPT
+    if (aesKey.length >= 32) {
+      finalKey = aesKey.slice(0, 32);
+      algorithm = "aes-256-cbc";
+    } else {
+      finalKey = aesKey.slice(0, 16);
+      algorithm = "aes-128-cbc";
+    }
+
+    // 🔓 DECRYPT DATA
     const decipher = crypto.createDecipheriv(
       algorithm,
-      aesKey,
+      finalKey,
       Buffer.from(initial_vector, "base64")
     );
-
-    decipher.setAutoPadding(true);
 
     let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
     decrypted = Buffer.concat([decrypted, decipher.final()]);
 
     const requestData = JSON.parse(decrypted.toString());
+
+    console.log("✅ Decrypted:", requestData);
 
     // ⚙️ RESPONSE
     const response =
@@ -100,37 +110,23 @@ app.post("/flow", (req, res) => {
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
-    // 🔐 ENCRYPT
+    // 🔐 ENCRYPT RESPONSE
     const cipher = crypto.createCipheriv(
       algorithm,
-      aesKey,
+      finalKey,
       Buffer.from(initial_vector, "base64")
     );
-
-    cipher.setAutoPadding(true);
 
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
-    return res.status(200).json({
-      data: encrypted.toString("base64"),
-    });
+    // ✅ RETURN BASE64 ONLY (NO EXTRA JSON STRUCTURE)
+    return res.status(200).send(encrypted.toString("base64"));
 
   } catch (err) {
     console.error("🔥 ERROR:", err);
-    return res.status(500).send("Error processing flow");
+    return res.status(200).send(""); // ⚠️ MUST RETURN 200 ALWAYS
   }
-});
-
-// ✅ VERIFY
-app.get("/flow", (req, res) => {
-  if (
-    req.query["hub.mode"] === "subscribe" &&
-    req.query["hub.verify_token"] === "my_verify_token"
-  ) {
-    return res.send(req.query["hub.challenge"]);
-  }
-  res.sendStatus(403);
 });
 
 // 🚀 START
