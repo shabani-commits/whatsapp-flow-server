@@ -10,7 +10,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🔑 KEYS (YOURS ✅)
+// 🔑 KEYS (YOUR REAL ONES)
 
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
@@ -62,25 +62,23 @@ app.get("/.well-known/public-key", (req, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT
+// ✅ FLOW ENDPOINT (FINAL FIXED)
 app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
+    // 🔥 FIX: CORRECT RSA PADDING (THIS WAS YOUR MAIN BUG)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
-        padding: crypto.constants.RSA_PKCS1_PADDING,
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
       },
       Buffer.from(encrypted_aes_key, "base64")
     );
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    // ✅ AUTO SELECT AES MODE
     const algorithm = aesKey.length === 16 ? "aes-128-cbc" : "aes-256-cbc";
-
-    console.log("🔐 Using:", algorithm);
 
     // 🔓 DECRYPT
     const decipher = crypto.createDecipheriv(
@@ -96,15 +94,13 @@ app.post("/flow", (req, res) => {
 
     const requestData = JSON.parse(decrypted.toString());
 
-    console.log("✅ Decrypted:", requestData);
-
     // ⚙️ RESPONSE
     const response =
       requestData?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
-    // 🔐 ENCRYPT RESPONSE
+    // 🔐 ENCRYPT
     const cipher = crypto.createCipheriv(
       algorithm,
       aesKey,
@@ -121,7 +117,7 @@ app.post("/flow", (req, res) => {
     });
 
   } catch (err) {
-    console.error("🔥 FULL ERROR:", err);
+    console.error("🔥 ERROR:", err);
     return res.status(500).send("Error processing flow");
   }
 });
