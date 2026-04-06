@@ -75,7 +75,18 @@ app.post("/flow", (req, res) => {
 });
 
 app.get("/flow", (req, res) => {
-  res.send("Flow endpoint ready ✅");
+  const VERIFY_TOKEN = "my_verify_token";
+
+  const mode = req.query["hub.mode"];
+  const challenge = req.query["hub.challenge"];
+  const token = req.query["hub.verify_token"];
+
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    console.log("✅ Webhook verified");
+    return res.status(200).send(challenge);
+  }
+
+  res.sendStatus(403);
 });
 
 // 🚀 START SERVER
