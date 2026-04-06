@@ -11,7 +11,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🔑 LOAD KEYS
+// 🔑 LOAD PUBLIC KEY
 let PUBLIC_KEY = "";
 
 try {
@@ -39,23 +39,23 @@ app.get("/.well-known/public-key", (req, res) => {
   }
 
   res.setHeader("Content-Type", "text/plain");
-  res.send(PUBLIC_KEY);
+  res.status(200).send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT (CRITICAL FIX)
+// ✅ FLOW ENDPOINT (CRITICAL — META HANDSHAKE)
 app.post("/flow", (req, res) => {
   console.log("📩 Flow request received:", req.body);
 
-  // SIMPLE RESPONSE (passes Meta health check)
-  res.json({
+  return res.status(200).json({
+    version: "1.0",
     screen: "SUCCESS",
     data: {}
   });
 });
 
-// ❗ ALSO HANDLE GET /flow (Meta sometimes checks this)
+// ✅ ALSO HANDLE GET /flow (Meta sometimes checks this)
 app.get("/flow", (req, res) => {
-  res.send("Flow endpoint ready ✅");
+  res.status(200).send("Flow endpoint ready ✅");
 });
 
 // 🚀 START SERVER
