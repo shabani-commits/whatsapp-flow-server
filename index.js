@@ -50,10 +50,9 @@ app.get("/.well-known/public-key", (req, res) => {
 });
 
 // ✅ FLOW ENDPOINT (THIS WAS MISSING 🔥)
-app.post("/", (req, res) => {
+app.post("/flow", (req, res) => {
   console.log("📩 Flow request received:", req.body);
 
-  // 👉 SIMPLE RESPONSE FOR HEALTH CHECK
   res.json({
     screen: "SUCCESS",
     data: {}
