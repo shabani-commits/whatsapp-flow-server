@@ -5,7 +5,7 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 
-// ✅ DEBUG (logs every request)
+// ✅ DEBUG LOGS
 app.use((req, res, next) => {
   console.log("Incoming:", req.method, req.url);
   next();
@@ -32,19 +32,14 @@ app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ TEST ROUTE (for debugging)
+// ✅ TEST ROUTE
 app.get("/test", (req, res) => {
   res.send("Test OK");
 });
 
-// ✅ PUBLIC KEY (MAIN - META USES THIS)
+// ✅ PUBLIC KEY (META USES THIS)
 app.get("/.well-known/public-key", (req, res) => {
-  res.sendFile(path.join(__dirname, ".well-known", "public-key"));
-});
-
-// ✅ BACKUP ROUTE (FOR YOU TO TEST)
-app.get("/public-key", (req, res) => {
-  console.log("👉 Backup public key route");
+  console.log("👉 Meta requesting public key");
 
   if (!PUBLIC_KEY) {
     return res.status(500).send("public.pem not found");
@@ -54,7 +49,16 @@ app.get("/public-key", (req, res) => {
   res.send(PUBLIC_KEY);
 });
 
-// ❌ DO NOT ADD STATIC OR .well-known FOLDER SERVING
+// ✅ FLOW ENDPOINT (THIS WAS MISSING 🔥)
+app.post("/", (req, res) => {
+  console.log("📩 Flow request received:", req.body);
+
+  // 👉 SIMPLE RESPONSE FOR HEALTH CHECK
+  res.json({
+    screen: "SUCCESS",
+    data: {}
+  });
+});
 
 // ✅ START SERVER
 const PORT = process.env.PORT || 10000;
