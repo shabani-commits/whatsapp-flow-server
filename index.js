@@ -67,7 +67,6 @@ app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 FIXED: AES-256 (IMPORTANT)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -76,8 +75,16 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
+    console.log("🔑 AES KEY LENGTH:", aesKey.length);
+
+    // ✅ AUTO SELECT AES MODE
+    const algorithm = aesKey.length === 16 ? "aes-128-cbc" : "aes-256-cbc";
+
+    console.log("🔐 Using:", algorithm);
+
+    // 🔓 DECRYPT
     const decipher = crypto.createDecipheriv(
-      "aes-256-cbc",
+      algorithm,
       aesKey,
       Buffer.from(initial_vector, "base64")
     );
@@ -89,13 +96,17 @@ app.post("/flow", (req, res) => {
 
     const requestData = JSON.parse(decrypted.toString());
 
+    console.log("✅ Decrypted:", requestData);
+
+    // ⚙️ RESPONSE
     const response =
       requestData?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
+    // 🔐 ENCRYPT RESPONSE
     const cipher = crypto.createCipheriv(
-      "aes-256-cbc",
+      algorithm,
       aesKey,
       Buffer.from(initial_vector, "base64")
     );
@@ -105,12 +116,12 @@ app.post("/flow", (req, res) => {
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
-    return res.json({
+    return res.status(200).json({
       data: encrypted.toString("base64"),
     });
 
   } catch (err) {
-    console.error("🔥 ERROR:", err);
+    console.error("🔥 FULL ERROR:", err);
     return res.status(500).send("Error processing flow");
   }
 });
