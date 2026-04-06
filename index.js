@@ -20,12 +20,45 @@ try {
   console.log("❌ public.pem missing");
 }
 
-// ✅ ROOT (optional)
+// ✅ ROOT GET
 app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ PUBLIC KEY ENDPOINT (REQUIRED)
+// ✅ ROOT POST (🔥 FIXED FOR BASE64)
+app.post("/", (req, res) => {
+  console.log("📩 Flow request:", req.body);
+
+  // ✅ Health check (ping)
+  if (req.body?.action === "ping") {
+    const response = {
+      version: "1.0",
+      data: { status: "active" }
+    };
+
+    return res.status(200).json({
+      data: Buffer.from(JSON.stringify(response)).toString("base64")
+    });
+  }
+
+  // ✅ Normal Flow response
+  const response = {
+    version: "1.0",
+    screen: "SUCCESS",
+    data: {}
+  };
+
+  return res.status(200).json({
+    data: Buffer.from(JSON.stringify(response)).toString("base64")
+  });
+});
+
+// ✅ TEST
+app.get("/test", (req, res) => {
+  res.send("Test OK");
+});
+
+// ✅ PUBLIC KEY (VERY IMPORTANT)
 app.get("/.well-known/public-key", (req, res) => {
   console.log("👉 Meta requesting public key");
 
@@ -37,7 +70,33 @@ app.get("/.well-known/public-key", (req, res) => {
   res.status(200).send(PUBLIC_KEY.trim());
 });
 
-// ✅ HEALTH CHECK (CRITICAL)
+// ✅ OPTIONAL /flow (same logic)
+app.post("/flow", (req, res) => {
+  console.log("📩 /flow request:", req.body);
+
+  if (req.body?.action === "ping") {
+    const response = {
+      version: "1.0",
+      data: { status: "active" }
+    };
+
+    return res.json({
+      data: Buffer.from(JSON.stringify(response)).toString("base64")
+    });
+  }
+
+  const response = {
+    version: "1.0",
+    screen: "SUCCESS",
+    data: {}
+  };
+
+  return res.json({
+    data: Buffer.from(JSON.stringify(response)).toString("base64")
+  });
+});
+
+// ✅ VERIFY WEBHOOK
 app.get("/flow", (req, res) => {
   const VERIFY_TOKEN = "my_verify_token";
 
@@ -50,27 +109,7 @@ app.get("/flow", (req, res) => {
     return res.status(200).send(challenge);
   }
 
-  return res.sendStatus(403);
-});
-
-// ✅ FLOW HANDLER (CRITICAL)
-app.post("/flow", (req, res) => {
-  console.log("📩 Flow request:", req.body);
-
-  // Meta ping check
-  if (req.body?.action === "ping") {
-    return res.status(200).json({
-      version: "1.0",
-      data: { status: "active" }
-    });
-  }
-
-  // Default success response
-  return res.status(200).json({
-    version: "1.0",
-    screen: "SUCCESS",
-    data: {}
-  });
+  res.sendStatus(403);
 });
 
 // 🚀 START SERVER
