@@ -50,12 +50,12 @@ app.get("/.well-known/public-key", (req, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT (FINAL)
+// ✅ FLOW ENDPOINT
 app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 decrypt AES key (FIXED)
+    // 🔓 RSA DECRYPT (FINAL CORRECT)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -65,50 +65,59 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    // 🔑 ensure correct length
-    const key = aesKey.length >= 32 ? aesKey.slice(0, 32) : aesKey.slice(0, 16);
-    const algo = key.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+    console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    // 🔓 decrypt payload
+    // ✅ USE KEY EXACTLY (NO CUTTING)
+    const algorithm =
+      aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+
+    // 🔓 DECRYPT PAYLOAD
     const decipher = crypto.createDecipheriv(
-      algo,
-      key,
+      algorithm,
+      aesKey,
       Buffer.from(initial_vector, "base64")
     );
 
-    let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
+    decipher.setAutoPadding(true);
+
+    let decrypted = decipher.update(
+      Buffer.from(encrypted_flow_data, "base64")
+    );
     decrypted = Buffer.concat([decrypted, decipher.final()]);
+
     const request = JSON.parse(decrypted.toString());
 
-    // ⚙️ build response
+    // ⚙️ RESPONSE
     const response =
       request?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
-    // 🔐 encrypt response
+    // 🔐 ENCRYPT RESPONSE
     const cipher = crypto.createCipheriv(
-      algo,
-      key,
+      algorithm,
+      aesKey,
       Buffer.from(initial_vector, "base64")
     );
+
+    cipher.setAutoPadding(true);
 
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
     const base64 = encrypted.toString("base64");
 
-    // ✅ IMPORTANT: RETURN RAW BASE64 STRING
+    // ✅ MUST RETURN RAW BASE64 STRING
     res.setHeader("Content-Type", "text/plain");
     return res.status(200).send(base64);
 
-  } catch (e) {
-    console.error("ERROR:", e);
-    return res.status(200).send(""); // must return 200
+  } catch (err) {
+    console.error("🔥 ERROR:", err);
+    return res.status(200).send("");
   }
 });
 
-// 🚀 START
+// 🚀 START SERVER
 app.listen(process.env.PORT || 10000, () => {
   console.log("🚀 Server running");
 });
