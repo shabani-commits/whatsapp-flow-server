@@ -23,80 +23,12 @@ try {
   console.log("❌ Key files missing");
 }
 
-// 🔐 ENCRYPT FUNCTION (REQUIRED BY META)
-function encryptResponse(data) {
-  const buffer = Buffer.from(JSON.stringify(data));
-
-  const encrypted = crypto.privateEncrypt(
-    {
-      key: PRIVATE_KEY,
-      padding: crypto.constants.RSA_PKCS1_PADDING,
-    },
-    buffer
-  );
-
-  return encrypted.toString("base64");
-}
-
-// ✅ ROOT GET
+// ✅ ROOT
 app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ ROOT POST (FLOW ENDPOINT)
-app.post("/", (req, res) => {
-  console.log("📩 Flow request:", req.body);
-
-  let response;
-
-  // 🔹 Health check (ping)
-  if (req.body?.action === "ping") {
-    response = {
-      version: "1.0",
-      data: { status: "active" }
-    };
-  } else {
-    response = {
-      version: "1.0",
-      screen: "SUCCESS",
-      data: {}
-    };
-  }
-
-  const encrypted = encryptResponse(response);
-
-  return res.status(200).json({
-    data: encrypted
-  });
-});
-
-// ✅ /flow POST (same logic)
-app.post("/flow", (req, res) => {
-  console.log("📩 /flow request:", req.body);
-
-  let response;
-
-  if (req.body?.action === "ping") {
-    response = {
-      version: "1.0",
-      data: { status: "active" }
-    };
-  } else {
-    response = {
-      version: "1.0",
-      screen: "SUCCESS",
-      data: {}
-    };
-  }
-
-  const base64 = Buffer.from(JSON.stringify(response)).toString("base64");
-
-  return res.json({
-    data: base64
-  });
-});
-
-// ✅ PUBLIC KEY ENDPOINT (VERY IMPORTANT)
+// ✅ PUBLIC KEY ENDPOINT
 app.get("/.well-known/public-key", (req, res) => {
   console.log("👉 Meta requesting public key");
 
@@ -105,10 +37,77 @@ app.get("/.well-known/public-key", (req, res) => {
   }
 
   res.setHeader("Content-Type", "text/plain");
-  res.status(200).send(PUBLIC_KEY.trim());
+  res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ WEBHOOK VERIFY
+// ✅ FLOW ENDPOINT (MAIN ONE)
+app.post("/flow", (req, res) => {
+  try {
+    console.log("📩 /flow request:", req.body);
+
+    const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
+
+    // 🔓 1. Decrypt AES key
+    const aesKey = crypto.privateDecrypt(
+      {
+        key: PRIVATE_KEY,
+        padding: crypto.constants.RSA_PKCS1_PADDING,
+      },
+      Buffer.from(encrypted_aes_key, "base64")
+    );
+
+    // 🔓 2. Decrypt request data
+    const decipher = crypto.createDecipheriv(
+      "aes-128-cbc",
+      aesKey,
+      Buffer.from(initial_vector, "base64")
+    );
+
+    let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
+    decrypted = Buffer.concat([decrypted, decipher.final()]);
+
+    const requestData = JSON.parse(decrypted.toString());
+
+    console.log("✅ Decrypted data:", requestData);
+
+    // ⚙️ 3. Build response
+    let response;
+
+    if (requestData?.action === "ping") {
+      response = {
+        version: "1.0",
+        data: { status: "active" }
+      };
+    } else {
+      response = {
+        version: "1.0",
+        screen: "SUCCESS",
+        data: {}
+      };
+    }
+
+    // 🔐 4. Encrypt response
+    const cipher = crypto.createCipheriv(
+      "aes-128-cbc",
+      aesKey,
+      Buffer.from(initial_vector, "base64")
+    );
+
+    let encrypted = cipher.update(JSON.stringify(response));
+    encrypted = Buffer.concat([encrypted, cipher.final()]);
+
+    // 📦 5. Send Base64
+    return res.json({
+      data: encrypted.toString("base64")
+    });
+
+  } catch (err) {
+    console.error("❌ Error:", err);
+    return res.status(500).send("Error processing flow");
+  }
+});
+
+// ✅ WEBHOOK VERIFY (keep it)
 app.get("/flow", (req, res) => {
   const VERIFY_TOKEN = "my_verify_token";
 
