@@ -44,8 +44,19 @@ app.get("/.well-known/public-key", (req, res) => {
 
 // ✅ FLOW ENDPOINT (CRITICAL — META HANDSHAKE)
 app.post("/flow", (req, res) => {
-  console.log("📩 Flow request received:", req.body);
+  console.log("📩 Flow request:", req.body);
 
+  // ✅ HANDLE META HEALTH CHECK
+  if (req.body?.action === "ping") {
+    return res.status(200).json({
+      version: "1.0",
+      data: {
+        status: "active"
+      }
+    });
+  }
+
+  // ✅ NORMAL FLOW RESPONSE
   return res.status(200).json({
     version: "1.0",
     screen: "SUCCESS",
