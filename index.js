@@ -5,21 +5,14 @@ const path = require("path");
 const app = express();
 app.use(express.json());
 
-// ✅ DEBUG LOGS
+// 🔍 DEBUG LOGS
 app.use((req, res, next) => {
   console.log("Incoming:", req.method, req.url);
   next();
 });
 
-// ✅ LOAD KEYS
-let PRIVATE_KEY = "";
+// 🔑 LOAD KEYS
 let PUBLIC_KEY = "";
-
-try {
-  PRIVATE_KEY = fs.readFileSync(path.join(__dirname, "private.pem"), "utf8");
-} catch (e) {
-  console.log("❌ private.pem missing");
-}
 
 try {
   PUBLIC_KEY = fs.readFileSync(path.join(__dirname, "public.pem"), "utf8");
@@ -27,12 +20,12 @@ try {
   console.log("❌ public.pem missing");
 }
 
-// ✅ ROOT CHECK
+// ✅ ROOT
 app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ TEST ROUTE
+// ✅ TEST
 app.get("/test", (req, res) => {
   res.send("Test OK");
 });
@@ -49,17 +42,23 @@ app.get("/.well-known/public-key", (req, res) => {
   res.send(PUBLIC_KEY);
 });
 
-// ✅ FLOW ENDPOINT (THIS WAS MISSING 🔥)
+// ✅ FLOW ENDPOINT (CRITICAL FIX)
 app.post("/flow", (req, res) => {
   console.log("📩 Flow request received:", req.body);
 
+  // SIMPLE RESPONSE (passes Meta health check)
   res.json({
     screen: "SUCCESS",
     data: {}
   });
 });
 
-// ✅ START SERVER
+// ❗ ALSO HANDLE GET /flow (Meta sometimes checks this)
+app.get("/flow", (req, res) => {
+  res.send("Flow endpoint ready ✅");
+});
+
+// 🚀 START SERVER
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log("🚀 Server running on port", PORT);
