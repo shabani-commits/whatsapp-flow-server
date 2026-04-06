@@ -89,10 +89,10 @@ app.post("/flow", (req, res) => {
     };
   }
 
-  const encrypted = encryptResponse(response);
+  const base64 = Buffer.from(JSON.stringify(response)).toString("base64");
 
-  return res.status(200).json({
-    data: encrypted
+  return res.json({
+    data: base64
   });
 });
 
