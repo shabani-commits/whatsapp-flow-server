@@ -20,35 +20,12 @@ try {
   console.log("❌ public.pem missing");
 }
 
-// ✅ ROOT GET
+// ✅ ROOT (optional)
 app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ ROOT POST (🔥 IMPORTANT FIX)
-app.post("/", (req, res) => {
-  console.log("📩 ROOT Flow request:", req.body);
-
-  if (req.body?.action === "ping") {
-    return res.status(200).json({
-      version: "1.0",
-      data: { status: "active" }
-    });
-  }
-
-  return res.status(200).json({
-    version: "1.0",
-    screen: "SUCCESS",
-    data: {}
-  });
-});
-
-// ✅ TEST
-app.get("/test", (req, res) => {
-  res.send("Test OK");
-});
-
-// ✅ PUBLIC KEY
+// ✅ PUBLIC KEY ENDPOINT (REQUIRED)
 app.get("/.well-known/public-key", (req, res) => {
   console.log("👉 Meta requesting public key");
 
@@ -60,20 +37,7 @@ app.get("/.well-known/public-key", (req, res) => {
   res.status(200).send(PUBLIC_KEY.trim());
 });
 
-// ✅ OPTIONAL /flow (safe to keep)
-app.post("/flow", (req, res) => {
-  console.log("📩 /flow request:", req.body);
-
-  if (req.body?.action === "ping") {
-    return res.json({ status: "ok" });
-  }
-
-  return res.json({
-    screen: "SUCCESS",
-    data: {}
-  });
-});
-
+// ✅ HEALTH CHECK (CRITICAL)
 app.get("/flow", (req, res) => {
   const VERIFY_TOKEN = "my_verify_token";
 
@@ -86,7 +50,27 @@ app.get("/flow", (req, res) => {
     return res.status(200).send(challenge);
   }
 
-  res.sendStatus(403);
+  return res.sendStatus(403);
+});
+
+// ✅ FLOW HANDLER (CRITICAL)
+app.post("/flow", (req, res) => {
+  console.log("📩 Flow request:", req.body);
+
+  // Meta ping check
+  if (req.body?.action === "ping") {
+    return res.status(200).json({
+      version: "1.0",
+      data: { status: "active" }
+    });
+  }
+
+  // Default success response
+  return res.status(200).json({
+    version: "1.0",
+    screen: "SUCCESS",
+    data: {}
+  });
 });
 
 // 🚀 START SERVER
