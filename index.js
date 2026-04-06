@@ -10,7 +10,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// 🔑 KEYS (ALREADY SET ✅)
+// 🔑 KEYS (YOURS ✅)
 
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
@@ -56,17 +56,18 @@ app.get("/", (req, res) => {
   res.send("Server running ✅");
 });
 
-// ✅ PUBLIC KEY
+// ✅ PUBLIC KEY ENDPOINT
 app.get("/.well-known/public-key", (req, res) => {
   res.setHeader("Content-Type", "text/plain");
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW
+// ✅ FLOW ENDPOINT
 app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
+    // 🔓 FIXED: AES-256 (IMPORTANT)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -76,7 +77,7 @@ app.post("/flow", (req, res) => {
     );
 
     const decipher = crypto.createDecipheriv(
-      "aes-128-cbc",
+      "aes-256-cbc",
       aesKey,
       Buffer.from(initial_vector, "base64")
     );
@@ -94,7 +95,7 @@ app.post("/flow", (req, res) => {
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
     const cipher = crypto.createCipheriv(
-      "aes-128-cbc",
+      "aes-256-cbc",
       aesKey,
       Buffer.from(initial_vector, "base64")
     );
