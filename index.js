@@ -4,12 +4,13 @@ import fs from "fs";
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // ===== LOAD KEYS =====
 const PRIVATE_KEY = fs.readFileSync("private.pem", "utf8");
 const PUBLIC_KEY = fs.readFileSync("public.pem", "utf8");
 
-// ===== PUBLIC KEY ENDPOINT (Meta fetches this) =====
+// ===== PUBLIC KEY ENDPOINT =====
 app.get("/.well-known/public-key", (_, res) => {
   res.type("text/plain");
   res.send(PUBLIC_KEY.trim());
@@ -20,9 +21,9 @@ app.post("/.well-known/public-key", (_, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
-// ===== WEBHOOK VERIFICATION (REQUIRED) =====
+// ===== WEBHOOK VERIFICATION =====
 app.get("/flow", (req, res) => {
-  const VERIFY_TOKEN = "mytoken999";
+  const VERIFY_TOKEN = "mytoken999"; // MUST MATCH META
 
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -46,7 +47,7 @@ app.post("/flow", (req, res) => {
       initial_vector,
     } = req.body;
 
-    // 1️⃣ Decrypt AES key
+    // ===== 1. Decrypt AES key =====
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -56,28 +57,23 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    // 2️⃣ Decrypt payload
+    // ===== 2. Decrypt payload =====
     const iv = Buffer.from(initial_vector, "base64");
     const encryptedData = Buffer.from(encrypted_flow_data, "base64");
 
     const authTag = encryptedData.slice(-16);
     const cipherText = encryptedData.slice(0, -16);
 
-    const decipher = crypto.createDecipheriv(
-      "aes-128-gcm",
-      aesKey,
-      iv
-    );
-
+    const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, iv);
     decipher.setAuthTag(authTag);
 
     let decrypted = decipher.update(cipherText, null, "utf8");
     decrypted += decipher.final("utf8");
 
     const requestJSON = JSON.parse(decrypted);
-    console.log("📥 DECRYPTED REQUEST:", requestJSON);
+    console.log("📥 DECRYPTED:", requestJSON);
 
-    // 3️⃣ Prepare response
+    // ===== 3. Prepare response =====
     const responsePayload = JSON.stringify({
       version: "3.0",
       data: {
@@ -85,28 +81,24 @@ app.post("/flow", (req, res) => {
       }
     });
 
-    const responseIv = crypto.randomBytes(16);
-
-    const cipher = crypto.createCipheriv(
-      "aes-128-gcm",
-      aesKey,
-      responseIv
-    );
+    // ⚠️ USE SAME IV (IMPORTANT)
+    const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, iv);
 
     let encrypted = cipher.update(responsePayload, "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
     const tag = cipher.getAuthTag();
 
+    // Append tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
 
     const base64Response = finalBuffer.toString("base64");
 
     console.log("📤 RESPONSE:", base64Response);
 
+    // ✅ ONLY encrypted_response (NO initial_vector)
     res.json({
-      encrypted_response: base64Response,
-      initial_vector: responseIv.toString("base64"),
+      encrypted_response: base64Response
     });
 
   } catch (err) {
