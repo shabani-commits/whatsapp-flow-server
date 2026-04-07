@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.send("✅ Server running");
 });
 
-// ===== PUBLIC KEY =====
+// ===== PUBLIC KEY ENDPOINT =====
 app.get("/.well-known/public-key", (req, res) => {
   res.type("text/plain");
   res.send(PUBLIC_KEY.trim());
@@ -27,7 +27,7 @@ app.post("/flow", (req, res) => {
 
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // ===== STEP 1: DECRYPT AES KEY =====
+    // ===== STEP 1: RSA DECRYPT AES KEY =====
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -39,23 +39,26 @@ app.post("/flow", (req, res) => {
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    // ===== STEP 2: IV =====
-    const iv = Buffer.from(initial_vector, "base64");
-    console.log("📏 IV LENGTH:", iv.length); // MUST be 12
+    // ===== STEP 2: FIX IV (CRITICAL) =====
+    const fullIV = Buffer.from(initial_vector, "base64");
+    const iv = fullIV.subarray(0, 12); // MUST be 12 bytes
 
-    // ===== STEP 3: ALGORITHM =====
+    console.log("📏 ORIGINAL IV LENGTH:", fullIV.length);
+    console.log("📏 USED IV LENGTH:", iv.length);
+
+    // ===== STEP 3: SELECT ALGORITHM =====
     const algorithm =
       aesKey.length === 16 ? "aes-128-gcm" : "aes-256-gcm";
 
     console.log("🔐 Using:", algorithm);
 
-    // ===== STEP 4: SPLIT DATA =====
+    // ===== STEP 4: SPLIT ENCRYPTED DATA =====
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
     const authTag = encryptedBuffer.slice(-16);
     const ciphertext = encryptedBuffer.slice(0, -16);
 
-    console.log("📏 Auth tag length:", authTag.length); // MUST be 16
+    console.log("📏 Auth tag length:", authTag.length);
 
     // ===== STEP 5: DECRYPT =====
     const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
@@ -89,29 +92,25 @@ app.post("/flow", (req, res) => {
     // ===== STEP 7: ENCRYPT RESPONSE =====
     const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
 
-    const encryptedResponseBuffer = Buffer.concat([
+    const encryptedResponse = Buffer.concat([
       cipher.update(JSON.stringify(response)),
       cipher.final(),
     ]);
 
     const responseAuthTag = cipher.getAuthTag();
 
-    console.log("📏 Response auth tag:", responseAuthTag.length); // MUST be 16
+    console.log("📏 Response auth tag:", responseAuthTag.length);
 
     // FINAL PAYLOAD = ciphertext + tag
     const finalBuffer = Buffer.concat([
-      encryptedResponseBuffer,
+      encryptedResponse,
       responseAuthTag,
     ]);
 
     const base64Response = finalBuffer.toString("base64");
 
-    // DEBUG CHECK
-    console.log(
-      "✅ Base64 valid:",
-      /^[A-Za-z0-9+/=]+$/.test(base64Response)
-    );
-
+    // ===== VALIDATION LOGS =====
+    console.log("✅ Base64 valid:", /^[A-Za-z0-9+/=]+$/.test(base64Response));
     console.log("📤 RESPONSE:", base64Response);
 
     // ===== STEP 8: SEND =====
