@@ -106,8 +106,8 @@ app.post("/flow", (req, res) => {
 
     // ===== STEP 8: SEND RESPONSE =====
     return res.status(200).json({
-      data: base64Response,
-    });
+  encrypted_response: base64Response,
+});
 
   } catch (err) {
     console.error("🔥 ERROR:", err);
