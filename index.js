@@ -74,12 +74,12 @@ app.post("/flow", (req, res) => {
     console.log("📥 DECRYPTED:", requestJSON);
 
     // ===== 3. Prepare response =====
-    const responsePayload = JSON.stringify({
-      version: "3.0",
-      data: {
-        status: "ok"
-      }
-    });
+const responsePayload = JSON.stringify({
+  version: "3.0",
+  data: {
+    status: "active"
+  }
+});
 
     // ⚠️ USE SAME IV (IMPORTANT)
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, iv);
