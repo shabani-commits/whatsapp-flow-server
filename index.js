@@ -41,24 +41,34 @@ app.post("/flow", (req, res) => {
 
     // ===== STEP 2: PREPARE IV =====
     const iv = Buffer.from(initial_vector, "base64");
-    console.log("📏 IV LENGTH:", iv.length);
+    console.log("📏 IV LENGTH:", iv.length); // MUST be 12 for GCM
 
-    // ===== STEP 3: SELECT AES MODE =====
-    const algorithm = aesKey.length === 16 ? "aes-128-cbc" : "aes-256-cbc";
+    // ===== STEP 3: SELECT AES-GCM MODE =====
+    const algorithm =
+      aesKey.length === 16 ? "aes-128-gcm" : "aes-256-gcm";
+
     console.log("🔐 Using:", algorithm);
 
-    // ===== STEP 4: DECRYPT DATA =====
-    const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
+    // ===== STEP 4: SPLIT DATA + AUTH TAG =====
+    const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
-    let decrypted = Buffer.concat([
-      decipher.update(Buffer.from(encrypted_flow_data, "base64")),
+    const authTag = encryptedBuffer.slice(-16); // last 16 bytes
+    const ciphertext = encryptedBuffer.slice(0, -16);
+
+    // ===== STEP 5: DECRYPT DATA =====
+    const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
+    decipher.setAuthTag(authTag);
+
+    const decryptedBuffer = Buffer.concat([
+      decipher.update(ciphertext),
       decipher.final(),
     ]);
 
-    const request = JSON.parse(decrypted.toString());
-    console.log("📥 DECRYPTED:", request);
+    const request = JSON.parse(decryptedBuffer.toString());
 
-    // ===== STEP 5: BUILD RESPONSE =====
+    console.log("📥 DECRYPTED REQUEST:", request);
+
+    // ===== STEP 6: BUILD RESPONSE =====
     let response;
 
     if (request?.action === "ping") {
@@ -74,27 +84,35 @@ app.post("/flow", (req, res) => {
       };
     }
 
-    // ===== STEP 6: ENCRYPT RESPONSE =====
+    // ===== STEP 7: ENCRYPT RESPONSE (GCM) =====
     const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
 
-    let encrypted = Buffer.concat([
-      cipher.update(JSON.stringify(response)),
+    const encryptedResponse = Buffer.concat([
+      cipher.update(JSON.stringify(response), "utf8"),
       cipher.final(),
     ]);
 
-    const base64Response = encrypted.toString("base64");
+    const responseAuthTag = cipher.getAuthTag();
 
-    console.log("📤 RESPONSE (base64):", base64Response);
+    // IMPORTANT: append auth tag
+    const finalPayload = Buffer.concat([
+      encryptedResponse,
+      responseAuthTag,
+    ]);
 
-    // ===== STEP 7: SEND =====
+    const base64Response = finalPayload.toString("base64");
+
+    console.log("📤 ENCRYPTED RESPONSE:", base64Response);
+
+    // ===== STEP 8: SEND RESPONSE =====
     return res.status(200).json({
       data: base64Response,
     });
 
   } catch (err) {
-    console.error("🔥 ERROR:", err.message);
+    console.error("🔥 ERROR:", err);
 
-    // VERY IMPORTANT for Meta
+    // Meta expects 421 on failure
     return res.status(421).send("Decryption failed");
   }
 });
