@@ -35,15 +35,16 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    // ===== 2. IV (USE FULL 16 BYTES) =====
+    // ===== 2. IV (USE EXACTLY AS RECEIVED) =====
     const iv = Buffer.from(initial_vector, "base64");
 
     // ===== 3. ALGORITHM =====
     const algorithm =
       aesKey.length === 16 ? "aes-128-gcm" : "aes-256-gcm";
 
-    // ===== 4. SPLIT DATA =====
+    // ===== 4. SPLIT ENCRYPTED DATA =====
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
+
     const authTag = encryptedBuffer.slice(-16);
     const ciphertext = encryptedBuffer.slice(0, -16);
 
@@ -64,22 +65,27 @@ app.post("/flow", (req, res) => {
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
-    // ===== 7. ENCRYPT RESPONSE =====
+    // ===== 7. ENCRYPT RESPONSE (STRICT) =====
     const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
 
-    const encrypted = Buffer.concat([
-      cipher.update(JSON.stringify(response)),
+    const encryptedResponse = Buffer.concat([
+      cipher.update(Buffer.from(JSON.stringify(response))), // IMPORTANT
       cipher.final(),
     ]);
 
-    const tag = cipher.getAuthTag();
+    const responseAuthTag = cipher.getAuthTag();
 
-    const finalBuffer = Buffer.concat([encrypted, tag]);
-    const base64 = finalBuffer.toString("base64");
+    // MUST append auth tag
+    const finalBuffer = Buffer.concat([
+      encryptedResponse,
+      responseAuthTag,
+    ]);
 
-    // ===== 8. SEND (RAW BASE64) =====
+    const base64Response = finalBuffer.toString("base64");
+
+    // ===== 8. SEND RAW BASE64 =====
     res.set("Content-Type", "text/plain");
-    return res.status(200).send(base64);
+    return res.status(200).send(base64Response);
 
   } catch (err) {
     console.error("ERROR:", err.message);
@@ -89,4 +95,6 @@ app.post("/flow", (req, res) => {
 
 // ===== START =====
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => console.log("Server running on", PORT));
+app.listen(PORT, () => {
+  console.log("Server running on port", PORT);
+});
