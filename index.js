@@ -16,21 +16,15 @@ app.get("/.well-known/public-key", (_, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
-app.post("/.well-known/public-key", (_, res) => {
-  res.type("text/plain");
-  res.send(PUBLIC_KEY.trim());
-});
-
 // ===== WEBHOOK VERIFICATION =====
 app.get("/flow", (req, res) => {
   const VERIFY_TOKEN = "mytoken999";
 
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
-
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    return res.status(200).send(challenge);
+  if (
+    req.query["hub.mode"] === "subscribe" &&
+    req.query["hub.verify_token"] === VERIFY_TOKEN
+  ) {
+    return res.status(200).send(req.query["hub.challenge"]);
   }
 
   return res.sendStatus(403);
@@ -57,7 +51,7 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    console.log("🔑 AES KEY LENGTH:", aesKey.length); // should be 16
+    console.log("🔑 AES KEY LENGTH:", aesKey.length); // must be 16
 
     // ===== 2. Decrypt payload =====
     const iv = Buffer.from(initial_vector, "base64");
@@ -75,18 +69,30 @@ app.post("/flow", (req, res) => {
     const requestJSON = JSON.parse(decrypted);
     console.log("📥 DECRYPTED:", requestJSON);
 
-    // ===== 3. Prepare correct response =====
-    const responsePayload = JSON.stringify({
-      version: "3.0",
-      data: {
-        status: "active" // ✅ REQUIRED
-      }
-    });
+    // ===== 3. HANDLE PING (MANDATORY) =====
+    let responsePayload;
 
-    // ===== 4. Encrypt response (USE SAME IV) =====
+    if (requestJSON.action === "ping") {
+      responsePayload = {
+        version: "3.0",
+        data: {
+          status: "active"
+        }
+      };
+    } else {
+      // fallback (not used in health check)
+      responsePayload = {
+        version: "3.0",
+        data: {}
+      };
+    }
+
+    const responseString = JSON.stringify(responsePayload);
+
+    // ===== 4. ENCRYPT RESPONSE (IMPORTANT RULES) =====
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, iv);
 
-    let encrypted = cipher.update(responsePayload, "utf8");
+    let encrypted = cipher.update(responseString, "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
     const tag = cipher.getAuthTag();
@@ -96,13 +102,14 @@ app.post("/flow", (req, res) => {
 
     console.log("📤 RESPONSE:", base64Response);
 
-    // ===== ✅ CRITICAL: RETURN RAW BASE64 =====
-    res.type("text/plain");
-    res.send(base64Response);
+    // ===== 5. RETURN EXACT FORMAT (THIS IS CRITICAL) =====
+    return res.status(200).json({
+      encrypted_response: base64Response
+    });
 
   } catch (err) {
     console.error("❌ ERROR:", err);
-    res.status(500).send("Error");
+    return res.status(500).send("Error");
   }
 });
 
