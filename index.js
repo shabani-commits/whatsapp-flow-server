@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
-// 🔑 KEYS
+// 🔑 KEYS (YOURS)
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
 3deYTcXbNIX/WJeMTqnfwDs02/PnYLaHkTsDAHTWNmeXdsXZ5vJh8M77gLQBLwsB
@@ -55,7 +55,7 @@ app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 RSA DECRYPT
+    // 🔓 RSA decrypt AES key
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -69,19 +69,22 @@ app.post("/flow", (req, res) => {
 
     const algorithm = aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
 
-    // 🔥 FIXED IV (CRITICAL)
+    // 🔥 FIX IV
     const iv = Buffer.from(initial_vector, "base64").subarray(0, 16);
 
-    // 🔓 DECRYPT DATA
+    // 🔓 DECRYPT REQUEST
     const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
-    decipher.setAutoPadding(true);
+    decipher.setAutoPadding(false);
 
     let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
     decrypted = Buffer.concat([decrypted, decipher.final()]);
 
-    const request = JSON.parse(decrypted.toString());
+    // remove padding junk
+    decrypted = decrypted.toString().replace(/\0+$/, "");
 
-    // ⚙️ BUILD RESPONSE
+    const request = JSON.parse(decrypted);
+
+    // ⚙️ RESPONSE
     const response =
       request?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
@@ -89,14 +92,14 @@ app.post("/flow", (req, res) => {
 
     // 🔐 ENCRYPT RESPONSE
     const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
-    cipher.setAutoPadding(true);
+    cipher.setAutoPadding(false);
 
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
     const base64 = encrypted.toString("base64");
 
-    // ✅ MUST RETURN RAW BASE64
+    // ✅ RAW BASE64 RESPONSE (CRITICAL)
     res.setHeader("Content-Type", "text/plain");
     return res.status(200).send(base64);
 
@@ -106,7 +109,7 @@ app.post("/flow", (req, res) => {
   }
 });
 
-// 🚀 START SERVER
+// 🚀 START
 app.listen(process.env.PORT || 10000, () => {
   console.log("🚀 Server running");
 });
