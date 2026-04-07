@@ -5,62 +5,53 @@ import fs from "fs";
 const app = express();
 app.use(express.json());
 
-// ===== CONFIG =====
 const VERIFY_TOKEN = "mytoken123";
 
-// ===== LOAD KEYS FROM FILES =====
+// keys from files (keep your existing pem files)
 const PRIVATE_KEY = fs.readFileSync("private.pem", "utf8");
 const PUBLIC_KEY = fs.readFileSync("public.pem", "utf8");
 
-// ===== PUBLIC KEY ENDPOINT =====
-app.get("/.well-known/public-key", (req, res) => {
+// expose public key
+app.get("/.well-known/public-key", (_, res) => {
   res.type("text/plain").send(PUBLIC_KEY.trim());
 });
 
-// ===== WEBHOOK VERIFY =====
+// webhook verification
 app.get("/flow", (req, res) => {
-  const mode = req.query["hub.mode"];
-  const token = req.query["hub.verify_token"];
-  const challenge = req.query["hub.challenge"];
-
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
-    return res.status(200).send(challenge);
+  if (
+    req.query["hub.mode"] === "subscribe" &&
+    req.query["hub.verify_token"] === VERIFY_TOKEN
+  ) {
+    return res.send(req.query["hub.challenge"]);
   }
-
-  return res.sendStatus(403);
+  res.sendStatus(403);
 });
 
-// ===== FLOW ENDPOINT =====
+// main flow endpoint
 app.post("/flow", (req, res) => {
   try {
     console.log("📩 Incoming request");
 
-    const {
-      encrypted_flow_data,
-      encrypted_aes_key,
-      initial_vector
-    } = req.body;
+    const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // ===== STEP 1: Decrypt AES key =====
+    // 1. decrypt AES key (RSA-OAEP SHA256)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
         padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-        oaepHash: "sha256"
+        oaepHash: "sha256",
       },
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    console.log("🔑 AES KEY LENGTH:", aesKey.length);
-
-    // ===== STEP 2: Prepare IV & data =====
     const iv = Buffer.from(initial_vector, "base64");
-    const encryptedData = Buffer.from(encrypted_flow_data, "base64");
+    const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
-    const authTag = encryptedData.slice(-16);
-    const cipherText = encryptedData.slice(0, -16);
+    // split ciphertext + tag
+    const authTag = encryptedBuffer.slice(-16);
+    const cipherText = encryptedBuffer.slice(0, -16);
 
-    // ===== STEP 3: Decrypt request =====
+    // 2. decrypt request
     const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, iv);
     decipher.setAuthTag(authTag);
 
@@ -70,53 +61,48 @@ app.post("/flow", (req, res) => {
     const request = JSON.parse(decrypted);
     console.log("📥 DECRYPTED:", request);
 
-    // ===== STEP 4: Prepare response =====
-    let responsePayload;
-
+    // 3. response payload
+    let payload;
     if (request.action === "ping") {
-      responsePayload = {
+      payload = {
         version: "3.0",
-        data: {
-          status: "active"
-        }
+        data: { status: "active" }
       };
     } else {
-      responsePayload = {
+      payload = {
         version: "3.0",
         screen: "SUCCESS",
         data: {}
       };
     }
 
-    const responseString = JSON.stringify(responsePayload);
+    const payloadStr = JSON.stringify(payload);
 
-    // ===== STEP 5: Encrypt response (CRITICAL) =====
+    // 4. encrypt response (CRITICAL — DO NOT CHANGE)
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, iv);
 
-    let encrypted = cipher.update(responseString, "utf8");
+    let encrypted = cipher.update(payloadStr, "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
     const tag = cipher.getAuthTag();
 
+    // FINAL FORMAT: ciphertext + tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
-
     const base64Response = finalBuffer.toString("base64");
 
     console.log("📤 RESPONSE:", base64Response);
 
-    // ===== STEP 6: SEND =====
-    return res.status(200).json({
+    // 5. return JSON
+    res.json({
       encrypted_response: base64Response
     });
 
   } catch (err) {
-    console.error("❌ ERROR:", err);
-    return res.status(500).send("Error");
+    console.error("❌ ERROR:", err.message);
+    res.sendStatus(500);
   }
 });
 
-// ===== START SERVER =====
-const PORT = process.env.PORT || 10000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+app.listen(10000, () => {
+  console.log("🚀 running on port 10000");
 });
