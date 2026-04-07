@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const app = express();
 app.use(express.json());
 
-// 🔑 KEYS (YOURS)
+// 🔑 YOUR KEYS
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
 3deYTcXbNIX/WJeMTqnfwDs02/PnYLaHkTsDAHTWNmeXdsXZ5vJh8M77gLQBLwsB
@@ -55,7 +55,7 @@ app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 RSA decrypt AES key
+    // 🔓 Decrypt AES key (FIXED: OAEP SHA256)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -69,7 +69,6 @@ app.post("/flow", (req, res) => {
 
     const algorithm = aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
 
-    // 🔥 FIX IV
     const iv = Buffer.from(initial_vector, "base64").subarray(0, 16);
 
     // 🔓 DECRYPT REQUEST
@@ -78,11 +77,11 @@ app.post("/flow", (req, res) => {
 
     let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
     decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-    // remove padding junk
     decrypted = decrypted.toString().replace(/\0+$/, "");
 
     const request = JSON.parse(decrypted);
+
+    console.log("📥 REQUEST:", request);
 
     // ⚙️ RESPONSE
     const response =
@@ -97,19 +96,25 @@ app.post("/flow", (req, res) => {
     let encrypted = cipher.update(JSON.stringify(response), "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
-    const base64 = encrypted.toString("base64");
+    const base64 = encrypted.toString("base64").trim();
 
-    // ✅ RAW BASE64 RESPONSE (CRITICAL)
+    console.log("📤 RESPONSE BASE64:", base64);
+
+    // 🚨 MUST RETURN RAW BASE64 ONLY
     res.setHeader("Content-Type", "text/plain");
-    return res.status(200).send(base64);
+    res.setHeader("Content-Length", Buffer.byteLength(base64));
+
+    return res.status(200).end(base64);
 
   } catch (err) {
     console.error("🔥 ERROR:", err);
-    return res.status(200).send("");
+
+    // ALWAYS return valid base64 (never empty)
+    return res.status(200).end("AA==");
   }
 });
 
-// 🚀 START
+// 🚀 START SERVER
 app.listen(process.env.PORT || 10000, () => {
   console.log("🚀 Server running");
 });
