@@ -1,111 +1,106 @@
 const express = require("express");
+const fs = require("fs");
 const crypto = require("crypto");
 
 const app = express();
 app.use(express.json());
 
-// 🔑 YOUR KEYS
-const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAm7Sv3bNH5lg+GCmdJBNq
-3deYTcXbNIX/WJeMTqnfwDs02/PnYLaHkTsDAHTWNmeXdsXZ5vJh8M77gLQBLwsB
-B61VpXy4ItElpdFIqec2hYD9O81mU6JdIjMhssReJ8whN80HmExnGCsYzVaNG39C
-oYaStVAGg20uZzIc/+A6Zu9Zdm8XO/dmXpVlMEAQfqQFliAUrR++/8bgzEifOlRN
-Ms9UuclzcnAcftiFpBQ9MOOjtZ96RuLdXgilGOpJDrPmaEk276c9CzBTkFVAbS+k
-l09p0Q01Yunw96HTJfER6hrHuIM21AFTn5uoIcGybufOdohQCTUZuBkj8q9dh8Xg
-hwIDAQAB
------END PUBLIC KEY-----`;
+// ===== LOAD KEYS =====
+const PRIVATE_KEY = fs.readFileSync("./private.pem", "utf8");
+const PUBLIC_KEY = fs.readFileSync("./public.pem", "utf8");
 
-const PRIVATE_KEY = `-----BEGIN PRIVATE KEY-----
-MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQCbtK/ds0fmWD4Y
-KZ0kE2rd15hNxds0hf9Yl4xOqd/AOzTb8+dgtoeROwMAdNY2Z5d2xdnm8mHwzvuA
-tAEvCwEHrVWlfLgi0SWl0Uip5zaFgP07zWZTol0iMyGyxF4nzCE3zQeYTGcYKxjN
-Vo0bf0KhhpK1UAaDbS5nMhz/4Dpm71l2bxc792ZelWUwQBB+pAWWIBStH77/xuDM
-SJ86VE0yz1S5yXNycBx+2IWkFD0w46O1n3pG4t1eCKUY6kkOs+ZoSTbvpz0LMFOQ
-VUBtL6SXT2nRDTVi6fD3odMl8RHqGse4gzbUAVOfm6ghwbJu5852iFAJNRm4GSPy
-r12HxeCHAgMBAAECggEACni24SKXActKdcaKrmvt4niG4igdy2T9nMAoa/vps9xn
-fClllLAB4wcEdynkZClIWvEIbAs+Aftxl6DDeZ30VkdWfLgsDA9jyEiQafjGRmk7
-3qM8MAC54bxtlj+1k1ibnUyZJ6lvv4TaeKjK+Z/v47wQrsfwgDM+DSumHqE+XEC+
-nzpsrV1yk2bbIpY3ds9JipZ00po4iNM1+e0gbnewKp+TpgvwW4zZAoCs1522+SVu
-bSS1wjO4jGrfbDqyYEgH4enK+hrK6QcbrdLyZby9G9yKRopD3ZIWxRsTbqEzkp8E
-Adp2ySEC7Yr1Y2PHZuf8PPmwFKUDE4YUveQvErCNjQKBgQDZ0BGEgDUcGmG6+2XF
-klt+gf4m88QzmDyLgBmEvJ3eb6QImN2/URwKktQoyKKTqLd6d0iGJCsurSNYeHUb
-kGXKOjr1mSuC9dD7otmhO19Rj0pQm70gJL5OTGMZYLWWtC0HJekDfjh3dS+YfcgN
-xKMIHlnQAUj1H92BS14kgVCPGwKBgQC3AR4BzMyLj2xLINKfbpPXNg2TZuCiJCZp
-yvkJYVUMjieJBXFFR59BNcV/QR1Zj1ntGCvcpW8fVab06nLC2sdC5TWruPJygcD/
-adS1QV8+/Kf0aHs+dk9lCCDecBM/R409fMPPDLpsUvhzhdIK95zKeHrgMmAmidG8
-J06ccPmPBQKBgCvOokdQ9d2SHMfbmitzdT1rba9t5a8u1jaEbB17RhEfyREFlcvN
-x2MFBvCw8anbDBPwe8Cm85xurCY2C++gSiizL3qH9O1g/UgvB7Ba3Z/svtiZih81
-5KSgzmmjPsJxuICwij3um/LCufDkk2DZhKS0XgHs0DykzQsdGnEjJQ2zAoGBAInU
-/ZS9exFh5F5xSjFqR09AFtl+EpIMSCJGDWtTM4tRRdWdk8JqPzgOF8HQeRqLLV+1
-ZNO6hgdDq4urSOQZgxqPJ+0+TtyPfZzhSKN7qRD3mkgqqShSU1n01UyzfMucSHSX
-E6NOItqTYy0fDSPVevHD7EgPqPtdsenUcRDCxjNBAoGBALbQUDNKfgNVEwOeTezL
-h4G2ig32igAXSmiXtl7vfzYr/qGbszLhdhyOkzXF2FbHIB865u4Y1A2a1xG0KTvT
-Ju/QCh/JRrCYKX1/YQGJFr6sEwKm+nq7nwsWCitclJ/Up1t2VKwAIwOHW77n+QCg
-v6XQbYOzdDovs36EZz4bsU/B
------END PRIVATE KEY-----`;
+// ===== ROOT =====
+app.get("/", (req, res) => {
+  res.send("✅ Server running");
+});
 
-// ✅ PUBLIC KEY ENDPOINT
+// ===== PUBLIC KEY (IMPORTANT) =====
 app.get("/.well-known/public-key", (req, res) => {
-  res.setHeader("Content-Type", "text/plain");
+  res.type("text/plain");
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT (FINAL FIXED)
+// ===== FLOW ENDPOINT =====
 app.post("/flow", (req, res) => {
   try {
+    console.log("📩 Incoming request");
+
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 Decrypt AES key (CORRECT)
-   const aesKey = crypto.privateDecrypt(
-  {
-    key: PRIVATE_KEY,
-    padding: crypto.constants.RSA_PKCS1_PADDING,
-  },
-  Buffer.from(encrypted_aes_key, "base64")
-);
+    // ===== STEP 1: DECRYPT AES KEY (RSA OAEP SHA256) =====
+    const aesKey = crypto.privateDecrypt(
+      {
+        key: PRIVATE_KEY,
+        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+        oaepHash: "sha256",
+      },
+      Buffer.from(encrypted_aes_key, "base64")
+    );
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    const algorithm = aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+    // ===== STEP 2: PREPARE IV =====
     const iv = Buffer.from(initial_vector, "base64");
+    console.log("📏 IV LENGTH:", iv.length);
 
-    // ✅ DECRYPT (correct padding)
+    // ===== STEP 3: SELECT AES MODE =====
+    const algorithm = aesKey.length === 16 ? "aes-128-cbc" : "aes-256-cbc";
+    console.log("🔐 Using:", algorithm);
+
+    // ===== STEP 4: DECRYPT DATA =====
     const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
 
-    let decrypted = decipher.update(encrypted_flow_data, "base64", "utf8");
-    decrypted += decipher.final("utf8");
+    let decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encrypted_flow_data, "base64")),
+      decipher.final(),
+    ]);
 
-    const request = JSON.parse(decrypted);
+    const request = JSON.parse(decrypted.toString());
+    console.log("📥 DECRYPTED:", request);
 
-    console.log("📥 REQUEST:", request);
+    // ===== STEP 5: BUILD RESPONSE =====
+    let response;
 
-    // ✅ RESPONSE
-    const response =
-      request?.action === "ping"
-        ? { version: "1.0", data: { status: "active" } }
-        : { version: "1.0", screen: "SUCCESS", data: {} };
+    if (request?.action === "ping") {
+      response = {
+        version: "1.0",
+        data: { status: "active" },
+      };
+    } else {
+      response = {
+        version: "1.0",
+        screen: "SUCCESS",
+        data: {},
+      };
+    }
 
-    // ✅ ENCRYPT RESPONSE (correct padding)
+    // ===== STEP 6: ENCRYPT RESPONSE =====
     const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
 
-    let encrypted = cipher.update(JSON.stringify(response), "utf8", "base64");
-    encrypted += cipher.final("base64");
+    let encrypted = Buffer.concat([
+      cipher.update(JSON.stringify(response)),
+      cipher.final(),
+    ]);
 
-    console.log("📤 RESPONSE:", encrypted);
+    const base64Response = encrypted.toString("base64");
 
-    // 🚨 MUST RETURN RAW BASE64 ONLY
-    res.setHeader("Content-Type", "text/plain");
-    return res.status(200).send(encrypted);
+    console.log("📤 RESPONSE (base64):", base64Response);
+
+    // ===== STEP 7: SEND =====
+    return res.status(200).json({
+      data: base64Response,
+    });
 
   } catch (err) {
-    console.error("🔥 ERROR:", err);
+    console.error("🔥 ERROR:", err.message);
 
-    // ⚠️ Meta expects specific failure code
+    // VERY IMPORTANT for Meta
     return res.status(421).send("Decryption failed");
   }
 });
 
-// 🚀 START SERVER
-app.listen(process.env.PORT || 10000, () => {
-  console.log("🚀 Server running");
+// ===== START SERVER =====
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log("🚀 Server running on port", PORT);
 });
