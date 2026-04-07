@@ -56,14 +56,13 @@ app.post("/flow", (req, res) => {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
     // 🔓 Decrypt AES key (CORRECT)
-    const aesKey = crypto.privateDecrypt(
-      {
-        key: PRIVATE_KEY,
-        padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
-        oaepHash: "sha256",
-      },
-      Buffer.from(encrypted_aes_key, "base64")
-    );
+   const aesKey = crypto.privateDecrypt(
+  {
+    key: PRIVATE_KEY,
+    padding: crypto.constants.RSA_PKCS1_PADDING,
+  },
+  Buffer.from(encrypted_aes_key, "base64")
+);
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
