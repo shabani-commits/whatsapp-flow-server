@@ -67,7 +67,7 @@ app.post("/flow", (req, res) => {
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
     const algorithm = aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
-    const iv = Buffer.from(initial_vector, "base64").slice(0, 16);
+    const iv = Buffer.from(initial_vector, "base64");
 
     // ✅ DECRYPT (correct padding)
     const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
