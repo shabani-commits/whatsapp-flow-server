@@ -14,7 +14,7 @@ app.get("/", (req, res) => {
   res.send("✅ Server running");
 });
 
-// ===== PUBLIC KEY ENDPOINT =====
+// ===== PUBLIC KEY =====
 app.get("/.well-known/public-key", (req, res) => {
   res.type("text/plain");
   res.send(PUBLIC_KEY.trim());
@@ -46,7 +46,7 @@ app.post("/flow", (req, res) => {
     console.log("📏 ORIGINAL IV LENGTH:", fullIV.length);
     console.log("📏 USED IV LENGTH:", iv.length);
 
-    // ===== STEP 3: SELECT ALGORITHM =====
+    // ===== STEP 3: AES-GCM =====
     const algorithm =
       aesKey.length === 16 ? "aes-128-gcm" : "aes-256-gcm";
 
@@ -101,7 +101,7 @@ app.post("/flow", (req, res) => {
 
     console.log("📏 Response auth tag:", responseAuthTag.length);
 
-    // FINAL PAYLOAD = ciphertext + tag
+    // FINAL PAYLOAD = ciphertext + authTag
     const finalBuffer = Buffer.concat([
       encryptedResponse,
       responseAuthTag,
@@ -109,14 +109,12 @@ app.post("/flow", (req, res) => {
 
     const base64Response = finalBuffer.toString("base64");
 
-    // ===== VALIDATION LOGS =====
     console.log("✅ Base64 valid:", /^[A-Za-z0-9+/=]+$/.test(base64Response));
-    console.log("📤 RESPONSE:", base64Response);
+    console.log("📤 FINAL RESPONSE:", base64Response);
 
-    // ===== STEP 8: SEND =====
-    return res.status(200).json({
-      encrypted_response: base64Response,
-    });
+    // ===== ✅ FINAL FIX: RETURN RAW BASE64 (NOT JSON) =====
+    res.set("Content-Type", "text/plain");
+    return res.status(200).send(base64Response);
 
   } catch (err) {
     console.error("🔥 ERROR:", err);
