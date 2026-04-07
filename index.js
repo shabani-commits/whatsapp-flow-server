@@ -50,12 +50,12 @@ app.get("/.well-known/public-key", (req, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
-// ✅ FLOW ENDPOINT
+// ✅ FLOW ENDPOINT (FINAL FIXED)
 app.post("/flow", (req, res) => {
   try {
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // 🔓 Decrypt AES key (FIXED: OAEP SHA256)
+    // 🔓 Decrypt AES key (CORRECT)
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -68,49 +68,41 @@ app.post("/flow", (req, res) => {
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
     const algorithm = aesKey.length === 32 ? "aes-256-cbc" : "aes-128-cbc";
+    const iv = Buffer.from(initial_vector, "base64").slice(0, 16);
 
-    const iv = Buffer.from(initial_vector, "base64").subarray(0, 16);
-
-    // 🔓 DECRYPT REQUEST
+    // ✅ DECRYPT (correct padding)
     const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
-    decipher.setAutoPadding(false);
 
-    let decrypted = decipher.update(Buffer.from(encrypted_flow_data, "base64"));
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-    decrypted = decrypted.toString().replace(/\0+$/, "");
+    let decrypted = decipher.update(encrypted_flow_data, "base64", "utf8");
+    decrypted += decipher.final("utf8");
 
     const request = JSON.parse(decrypted);
 
     console.log("📥 REQUEST:", request);
 
-    // ⚙️ RESPONSE
+    // ✅ RESPONSE
     const response =
       request?.action === "ping"
         ? { version: "1.0", data: { status: "active" } }
         : { version: "1.0", screen: "SUCCESS", data: {} };
 
-    // 🔐 ENCRYPT RESPONSE
+    // ✅ ENCRYPT RESPONSE (correct padding)
     const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
-    cipher.setAutoPadding(false);
 
-    let encrypted = cipher.update(JSON.stringify(response), "utf8");
-    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    let encrypted = cipher.update(JSON.stringify(response), "utf8", "base64");
+    encrypted += cipher.final("base64");
 
-    const base64 = encrypted.toString("base64").trim();
-
-    console.log("📤 RESPONSE BASE64:", base64);
+    console.log("📤 RESPONSE:", encrypted);
 
     // 🚨 MUST RETURN RAW BASE64 ONLY
     res.setHeader("Content-Type", "text/plain");
-    res.setHeader("Content-Length", Buffer.byteLength(base64));
-
-    return res.status(200).end(base64);
+    return res.status(200).send(encrypted);
 
   } catch (err) {
     console.error("🔥 ERROR:", err);
 
-    // ALWAYS return valid base64 (never empty)
-    return res.status(200).end("AA==");
+    // ⚠️ Meta expects specific failure code
+    return res.status(421).send("Decryption failed");
   }
 });
 
