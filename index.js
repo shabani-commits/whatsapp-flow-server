@@ -7,34 +7,51 @@ app.use(express.json());
 
 const VERIFY_TOKEN = "mytoken123";
 
-// keys from files (keep your existing pem files)
+// Load keys from your existing files
 const PRIVATE_KEY = fs.readFileSync("private.pem", "utf8");
 const PUBLIC_KEY = fs.readFileSync("public.pem", "utf8");
 
-// expose public key
+
+// ==============================
+// PUBLIC KEY ENDPOINT (REQUIRED)
+// ==============================
 app.get("/.well-known/public-key", (_, res) => {
   res.type("text/plain").send(PUBLIC_KEY.trim());
 });
 
-// webhook verification
+
+// ==============================
+// WEBHOOK VERIFICATION (REQUIRED)
+// ==============================
 app.get("/flow", (req, res) => {
-  if (
-    req.query["hub.mode"] === "subscribe" &&
-    req.query["hub.verify_token"] === VERIFY_TOKEN
-  ) {
-    return res.send(req.query["hub.challenge"]);
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
   }
-  res.sendStatus(403);
+
+  return res.sendStatus(403);
 });
 
-// main flow endpoint
+
+// ==============================
+// MAIN FLOW ENDPOINT
+// ==============================
 app.post("/flow", (req, res) => {
   try {
     console.log("📩 Incoming request");
 
-    const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
+    const {
+      encrypted_flow_data,
+      encrypted_aes_key,
+      initial_vector
+    } = req.body;
 
-    // 1. decrypt AES key (RSA-OAEP SHA256)
+    // ==========================
+    // 1. Decrypt AES key (RSA)
+    // ==========================
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -51,7 +68,9 @@ app.post("/flow", (req, res) => {
     const authTag = encryptedBuffer.slice(-16);
     const cipherText = encryptedBuffer.slice(0, -16);
 
-    // 2. decrypt request
+    // ==========================
+    // 2. Decrypt request
+    // ==========================
     const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, iv);
     decipher.setAuthTag(authTag);
 
@@ -61,8 +80,12 @@ app.post("/flow", (req, res) => {
     const request = JSON.parse(decrypted);
     console.log("📥 DECRYPTED:", request);
 
-    // 3. response payload
+
+    // ==========================
+    // 3. Build response payload
+    // ==========================
     let payload;
+
     if (request.action === "ping") {
       payload = {
         version: "3.0",
@@ -78,7 +101,10 @@ app.post("/flow", (req, res) => {
 
     const payloadStr = JSON.stringify(payload);
 
-    // 4. encrypt response (CRITICAL — DO NOT CHANGE)
+
+    // ==========================
+    // 4. Encrypt response (FIXED)
+    // ==========================
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, iv);
 
     let encrypted = cipher.update(payloadStr, "utf8");
@@ -86,13 +112,17 @@ app.post("/flow", (req, res) => {
 
     const tag = cipher.getAuthTag();
 
-    // FINAL FORMAT: ciphertext + tag
-    const finalBuffer = Buffer.concat([encrypted, tag]);
+    // ✅ CRITICAL: prepend IV
+    const finalBuffer = Buffer.concat([iv, encrypted, tag]);
+
     const base64Response = finalBuffer.toString("base64");
 
     console.log("📤 RESPONSE:", base64Response);
 
-    // 5. return JSON
+
+    // ==========================
+    // 5. Send response
+    // ==========================
     res.json({
       encrypted_response: base64Response
     });
@@ -103,6 +133,10 @@ app.post("/flow", (req, res) => {
   }
 });
 
+
+// ==============================
+// START SERVER
+// ==============================
 app.listen(10000, () => {
-  console.log("🚀 running on port 10000");
+  console.log("🚀 Server running on port 10000");
 });
