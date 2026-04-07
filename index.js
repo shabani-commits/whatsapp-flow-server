@@ -18,6 +18,11 @@ app.get("/.well-known/public-key", (_, res) => {
   res.send(PUBLIC_KEY.trim());
 });
 
+app.post("/.well-known/public-key", (req, res) => {
+  res.type("text/plain");
+  res.send(PUBLIC_KEY.trim());
+});
+
 // ===== FLOW ENDPOINT =====
 app.post("/flow", (req, res) => {
   try {
