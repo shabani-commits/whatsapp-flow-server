@@ -39,10 +39,14 @@ app.post("/flow", (req, res) => {
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    // ===== STEP 2: USE FULL IV (IMPORTANT) =====
-    const iv = Buffer.from(initial_vector, "base64");
+    // ===== STEP 2: IV HANDLING (CRITICAL FIX) =====
+    const fullIV = Buffer.from(initial_vector, "base64");
 
-    console.log("📏 IV LENGTH:", iv.length); // should be 16
+    const ivDecrypt = fullIV;              // 16 bytes
+    const ivEncrypt = fullIV.subarray(0, 12); // 12 bytes
+
+    console.log("📏 IV decrypt:", ivDecrypt.length);
+    console.log("📏 IV encrypt:", ivEncrypt.length);
 
     // ===== STEP 3: AES-GCM =====
     const algorithm =
@@ -59,7 +63,7 @@ app.post("/flow", (req, res) => {
     console.log("📏 Auth tag length:", authTag.length);
 
     // ===== STEP 5: DECRYPT =====
-    const decipher = crypto.createDecipheriv(algorithm, aesKey, iv);
+    const decipher = crypto.createDecipheriv(algorithm, aesKey, ivDecrypt);
     decipher.setAuthTag(authTag);
 
     const decryptedBuffer = Buffer.concat([
@@ -88,7 +92,7 @@ app.post("/flow", (req, res) => {
     }
 
     // ===== STEP 7: ENCRYPT RESPONSE =====
-    const cipher = crypto.createCipheriv(algorithm, aesKey, iv);
+    const cipher = crypto.createCipheriv(algorithm, aesKey, ivEncrypt);
 
     const encryptedResponse = Buffer.concat([
       cipher.update(JSON.stringify(response)),
@@ -99,7 +103,7 @@ app.post("/flow", (req, res) => {
 
     console.log("📏 Response auth tag:", responseAuthTag.length);
 
-    // FINAL = ciphertext + auth tag
+    // FINAL PAYLOAD = ciphertext + auth tag
     const finalBuffer = Buffer.concat([
       encryptedResponse,
       responseAuthTag,
@@ -110,7 +114,7 @@ app.post("/flow", (req, res) => {
     console.log("✅ Base64 valid:", /^[A-Za-z0-9+/=]+$/.test(base64Response));
     console.log("📤 FINAL RESPONSE:", base64Response);
 
-    // ===== ✅ SEND RAW BASE64 (CRITICAL) =====
+    // ===== SEND RAW BASE64 (REQUIRED) =====
     res.set("Content-Type", "text/plain");
     return res.status(200).send(base64Response);
 
