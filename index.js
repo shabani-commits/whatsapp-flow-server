@@ -27,7 +27,7 @@ app.post("/flow", (req, res) => {
 
     const { encrypted_flow_data, encrypted_aes_key, initial_vector } = req.body;
 
-    // ===== STEP 1: RSA DECRYPT AES KEY =====
+    // ===== STEP 1: DECRYPT AES KEY =====
     const aesKey = crypto.privateDecrypt(
       {
         key: PRIVATE_KEY,
@@ -39,12 +39,10 @@ app.post("/flow", (req, res) => {
 
     console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
-    // ===== STEP 2: FIX IV (CRITICAL) =====
-    const fullIV = Buffer.from(initial_vector, "base64");
-    const iv = fullIV.subarray(0, 12); // MUST be 12 bytes
+    // ===== STEP 2: USE FULL IV (IMPORTANT) =====
+    const iv = Buffer.from(initial_vector, "base64");
 
-    console.log("📏 ORIGINAL IV LENGTH:", fullIV.length);
-    console.log("📏 USED IV LENGTH:", iv.length);
+    console.log("📏 IV LENGTH:", iv.length); // should be 16
 
     // ===== STEP 3: AES-GCM =====
     const algorithm =
@@ -52,7 +50,7 @@ app.post("/flow", (req, res) => {
 
     console.log("🔐 Using:", algorithm);
 
-    // ===== STEP 4: SPLIT ENCRYPTED DATA =====
+    // ===== STEP 4: SPLIT DATA =====
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
     const authTag = encryptedBuffer.slice(-16);
@@ -101,7 +99,7 @@ app.post("/flow", (req, res) => {
 
     console.log("📏 Response auth tag:", responseAuthTag.length);
 
-    // FINAL PAYLOAD = ciphertext + authTag
+    // FINAL = ciphertext + auth tag
     const finalBuffer = Buffer.concat([
       encryptedResponse,
       responseAuthTag,
@@ -112,7 +110,7 @@ app.post("/flow", (req, res) => {
     console.log("✅ Base64 valid:", /^[A-Za-z0-9+/=]+$/.test(base64Response));
     console.log("📤 FINAL RESPONSE:", base64Response);
 
-    // ===== ✅ FINAL FIX: RETURN RAW BASE64 (NOT JSON) =====
+    // ===== ✅ SEND RAW BASE64 (CRITICAL) =====
     res.set("Content-Type", "text/plain");
     return res.status(200).send(base64Response);
 
