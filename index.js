@@ -64,7 +64,7 @@ app.post("/flow", (req, res) => {
     const iv = Buffer.from(initial_vector, "base64");
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
-    // split ciphertext + tag
+    // Split ciphertext + tag
     const authTag = encryptedBuffer.slice(-16);
     const cipherText = encryptedBuffer.slice(0, -16);
 
@@ -116,21 +116,27 @@ app.post("/flow", (req, res) => {
 
     const tag = cipher.getAuthTag();
 
-    // final buffer = ciphertext + tag
+    // Final buffer = ciphertext + tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
 
-    const base64Response = finalBuffer.toString("base64");
+    // ✅ CLEAN Base64 (critical fix)
+    const base64Response = finalBuffer
+      .toString("base64")
+      .replace(/\n/g, "")
+      .replace(/\r/g, "")
+      .trim();
 
     console.log("📤 RESPONSE:", base64Response);
 
 
     // ==========================
-    // 5. ✅ FIXED RESPONSE
+    // 5. SEND RESPONSE (FINAL FIX)
     // ==========================
-    res
-      .status(200)
-      .type("text/plain")   // VERY IMPORTANT
-      .send(base64Response); // RAW base64 ONLY
+    res.set("Content-Type", "application/json");
+
+    res.send(JSON.stringify({
+      encrypted_response: base64Response
+    }));
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);
