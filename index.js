@@ -103,10 +103,10 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 4. Encrypt response (FINAL FIX)
+    // 4. Encrypt response
     // ==========================
 
-    // 🔥 invert IV (REQUIRED by Meta)
+    // 🔥 REQUIRED: invert IV
     const flippedIV = Buffer.from(iv.map(b => b ^ 0xff));
 
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, flippedIV);
@@ -116,7 +116,7 @@ app.post("/flow", (req, res) => {
 
     const tag = cipher.getAuthTag();
 
-    // ✅ final format (NO IV here)
+    // final buffer = ciphertext + tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
 
     const base64Response = finalBuffer.toString("base64");
@@ -125,11 +125,12 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 5. Send response
+    // 5. ✅ FIXED RESPONSE
     // ==========================
-    res.json({
-      encrypted_response: base64Response
-    });
+    res
+      .status(200)
+      .type("text/plain")   // VERY IMPORTANT
+      .send(base64Response); // RAW base64 ONLY
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);
