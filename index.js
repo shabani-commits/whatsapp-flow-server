@@ -21,6 +21,18 @@ app.get("/.well-known/public-key", (_, res) => {
 
 
 // ==============================
+// 🧪 DEBUG BASE64 TEST
+// ==============================
+app.get("/debug-base64", (req, res) => {
+  const test = Buffer.from("hello-world").toString("base64");
+
+  res.json({
+    encrypted_response: test
+  });
+});
+
+
+// ==============================
 // WEBHOOK VERIFICATION
 // ==============================
 app.get("/flow", (req, res) => {
@@ -50,7 +62,7 @@ app.post("/flow", (req, res) => {
     } = req.body;
 
     // ==========================
-    // 1. Decrypt AES key (RSA)
+    // 1. Decrypt AES key
     // ==========================
     const aesKey = crypto.privateDecrypt(
       {
@@ -61,17 +73,17 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
-    console.log("🔑 AES KEY LENGTH:", aesKey.length); // MUST be 16
+    console.log("🔑 AES KEY LENGTH:", aesKey.length);
 
     const iv = Buffer.from(initial_vector, "base64");
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
-    // Split ciphertext + tag
+    // split ciphertext + tag
     const authTag = encryptedBuffer.slice(-16);
     const cipherText = encryptedBuffer.slice(0, -16);
 
     // ==========================
-    // 2. Decrypt request (AES-GCM)
+    // 2. Decrypt request
     // ==========================
     const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, iv);
     decipher.setAuthTag(authTag);
@@ -105,10 +117,8 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 4. Encrypt response (CORRECT)
+    // 4. Encrypt response
     // ==========================
-
-    // ✅ Flip IV (required by Meta)
     const flippedIV = Buffer.alloc(iv.length);
     for (let i = 0; i < iv.length; i++) {
       flippedIV[i] = iv[i] ^ 0xff;
@@ -116,7 +126,7 @@ app.post("/flow", (req, res) => {
 
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, flippedIV);
 
-    // 🔥 IMPORTANT FIX: set AAD (required for GCM integrity)
+    // GCM integrity
     cipher.setAAD(Buffer.from([]));
 
     const encrypted = Buffer.concat([
@@ -126,7 +136,6 @@ app.post("/flow", (req, res) => {
 
     const tag = cipher.getAuthTag();
 
-    // ✅ Correct format: ciphertext + tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
 
     const base64Response = finalBuffer.toString("base64");
