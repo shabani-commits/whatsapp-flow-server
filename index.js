@@ -61,10 +61,12 @@ app.post("/flow", (req, res) => {
       Buffer.from(encrypted_aes_key, "base64")
     );
 
+    console.log("🔑 AES KEY LENGTH:", aesKey.length); // MUST be 16
+
     const iv = Buffer.from(initial_vector, "base64");
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
-    // Split ciphertext + tag
+    // split ciphertext + tag
     const authTag = encryptedBuffer.slice(-16);
     const cipherText = encryptedBuffer.slice(0, -16);
 
@@ -103,40 +105,38 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 4. Encrypt response
+    // 4. Encrypt response (FIXED)
     // ==========================
 
-    // 🔥 REQUIRED: invert IV
-    const flippedIV = Buffer.from(iv.map(b => b ^ 0xff));
+    // ✅ Safe IV flip
+    const flippedIV = Buffer.alloc(iv.length);
+    for (let i = 0; i < iv.length; i++) {
+      flippedIV[i] = iv[i] ^ 0xff;
+    }
 
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, flippedIV);
 
-    let encrypted = cipher.update(payloadStr, "utf8");
-    encrypted = Buffer.concat([encrypted, cipher.final()]);
+    // ✅ CRITICAL FIX: use Buffer input
+    const encrypted = Buffer.concat([
+      cipher.update(Buffer.from(payloadStr, "utf8")),
+      cipher.final()
+    ]);
 
     const tag = cipher.getAuthTag();
 
-    // Final buffer = ciphertext + tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
 
-    // ✅ CLEAN Base64 (critical fix)
-    const base64Response = finalBuffer
-      .toString("base64")
-      .replace(/\n/g, "")
-      .replace(/\r/g, "")
-      .trim();
+    const base64Response = finalBuffer.toString("base64");
 
     console.log("📤 RESPONSE:", base64Response);
 
 
     // ==========================
-    // 5. SEND RESPONSE (FINAL FIX)
+    // 5. Send response
     // ==========================
-    res.set("Content-Type", "application/json");
-
-    res.send(JSON.stringify({
+    res.json({
       encrypted_response: base64Response
-    }));
+    });
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);
