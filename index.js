@@ -3,7 +3,7 @@ import crypto from "crypto";
 import fs from "fs";
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 
 const VERIFY_TOKEN = "mytoken123";
 
@@ -50,7 +50,7 @@ app.post("/flow", (req, res) => {
     } = req.body;
 
     // ==========================
-    // 1. Decrypt AES key
+    // 1. Decrypt AES key (RSA)
     // ==========================
     const aesKey = crypto.privateDecrypt(
       {
@@ -66,12 +66,12 @@ app.post("/flow", (req, res) => {
     const iv = Buffer.from(initial_vector, "base64");
     const encryptedBuffer = Buffer.from(encrypted_flow_data, "base64");
 
-    // split ciphertext + tag
+    // Split ciphertext + tag
     const authTag = encryptedBuffer.slice(-16);
     const cipherText = encryptedBuffer.slice(0, -16);
 
     // ==========================
-    // 2. Decrypt request
+    // 2. Decrypt request (AES-GCM)
     // ==========================
     const decipher = crypto.createDecipheriv("aes-128-gcm", aesKey, iv);
     decipher.setAuthTag(authTag);
@@ -105,10 +105,10 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 4. Encrypt response (FIXED)
+    // 4. Encrypt response (CORRECT)
     // ==========================
 
-    // ✅ Safe IV flip
+    // ✅ Flip IV (required by Meta)
     const flippedIV = Buffer.alloc(iv.length);
     for (let i = 0; i < iv.length; i++) {
       flippedIV[i] = iv[i] ^ 0xff;
@@ -116,7 +116,9 @@ app.post("/flow", (req, res) => {
 
     const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, flippedIV);
 
-    // ✅ CRITICAL FIX: use Buffer input
+    // 🔥 IMPORTANT FIX: set AAD (required for GCM integrity)
+    cipher.setAAD(Buffer.from([]));
+
     const encrypted = Buffer.concat([
       cipher.update(Buffer.from(payloadStr, "utf8")),
       cipher.final()
@@ -124,6 +126,7 @@ app.post("/flow", (req, res) => {
 
     const tag = cipher.getAuthTag();
 
+    // ✅ Correct format: ciphertext + tag
     const finalBuffer = Buffer.concat([encrypted, tag]);
 
     const base64Response = finalBuffer.toString("base64");
