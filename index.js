@@ -7,13 +7,13 @@ app.use(express.json());
 
 const VERIFY_TOKEN = "mytoken123";
 
-// Load keys from your existing files
+// Load keys
 const PRIVATE_KEY = fs.readFileSync("private.pem", "utf8");
 const PUBLIC_KEY = fs.readFileSync("public.pem", "utf8");
 
 
 // ==============================
-// PUBLIC KEY ENDPOINT (REQUIRED)
+// PUBLIC KEY ENDPOINT
 // ==============================
 app.get("/.well-known/public-key", (_, res) => {
   res.type("text/plain").send(PUBLIC_KEY.trim());
@@ -21,7 +21,7 @@ app.get("/.well-known/public-key", (_, res) => {
 
 
 // ==============================
-// WEBHOOK VERIFICATION (REQUIRED)
+// WEBHOOK VERIFICATION
 // ==============================
 app.get("/flow", (req, res) => {
   const mode = req.query["hub.mode"];
@@ -50,7 +50,7 @@ app.post("/flow", (req, res) => {
     } = req.body;
 
     // ==========================
-    // 1. Decrypt AES key (RSA)
+    // 1. Decrypt AES key
     // ==========================
     const aesKey = crypto.privateDecrypt(
       {
@@ -82,7 +82,7 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 3. Build response payload
+    // 3. Build response
     // ==========================
     let payload;
 
@@ -103,17 +103,21 @@ app.post("/flow", (req, res) => {
 
 
     // ==========================
-    // 4. Encrypt response (FIXED)
+    // 4. Encrypt response (FINAL FIX)
     // ==========================
-    const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, iv);
+
+    // 🔥 invert IV (REQUIRED by Meta)
+    const flippedIV = Buffer.from(iv.map(b => b ^ 0xff));
+
+    const cipher = crypto.createCipheriv("aes-128-gcm", aesKey, flippedIV);
 
     let encrypted = cipher.update(payloadStr, "utf8");
     encrypted = Buffer.concat([encrypted, cipher.final()]);
 
     const tag = cipher.getAuthTag();
 
-    // ✅ CRITICAL: prepend IV
-    const finalBuffer = Buffer.concat([iv, encrypted, tag]);
+    // ✅ final format (NO IV here)
+    const finalBuffer = Buffer.concat([encrypted, tag]);
 
     const base64Response = finalBuffer.toString("base64");
 
